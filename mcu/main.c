@@ -2,7 +2,7 @@
 #include "bsp/msp_sys.h"
 #include "bsp/oled.h"
 #include "bsp/keyboard.h"
-#include "bsp/led.h"
+#include "bsp/uart.h"
 #include <string.h>
 
 
@@ -12,22 +12,14 @@ int main()
     init_sys();
     init_oled();
     init_keyboard();
+    init_uart();
 
     char test_str[] = "Hello, World!";
 
     while (1)
     {
-        keyboard_update();
-        if (keyboard_keys[0][0].state_event == KEY_ON)
-        {
-            strcpy(test_str, "World, Hello!");
-        }
-        else
-        {
-            strcpy(test_str, "Hello, World!");
-        }
-        oled_show_string(0, 0, test_str);
-        delay_cycles(TIME_MS(10));
+        uart_send_byte(0b10101011, true);
+        delay_cycles(TIME_MS(1000));
     }
 
     return 0;
