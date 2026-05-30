@@ -1,11 +1,14 @@
 #include "ui/ui.h"
 #include "bsp/keyboard.h"
 #include "bsp/msp_sys.h"
+#include "events.h"
 
-const char* freq_suffixes[] = { "Hz", "kHz", "MHz" };
-const double freq_coeffs[] = { 1.0, 1e-3, 1e-6 };
-const char* bitrate_suffixes[] = { "bps", "kbps" };
-const double bitrate_coeffs[] = { 1.0, 1e-3 };
+static const char* freq_suffixes[] = { "Hz", "kHz", "MHz" };
+static const double freq_coeffs[] = { 1.0, 1e-3, 1e-6 };
+static const char* bitrate_suffixes[] = { "bps", "kbps" };
+static const double bitrate_coeffs[] = { 1.0, 1e-3 };
+static const char* rate_suffixes[] = { "%" };
+static const double rate_coeffs[] = { 1.0 };
 
 UIMenu main_menu;
 
@@ -13,64 +16,52 @@ UIMenu simple_output_menu;
 UICheckbox simple_output_checkbox;
 UIInputBoxDouble simple_output_freq_input;
 UIChooseBox simple_output_waveform_choose;
-const char* simple_output_waveform_options[] = { "Sine", "Square", "Triangle", "Sawtooth" };
-UIWidget* simple_output_menu_items[] = {
+static const char* simple_output_waveform_options[] = { "Sine", "Square", "Triangle", "Sawtooth" };
+static UIWidget* simple_output_menu_items[] = {
     &simple_output_checkbox.base,
     &simple_output_freq_input.base.base,
     &simple_output_waveform_choose.base.base
 };
 
 UIMenu analog_modulation_menu;
-
-UIMenu analog_am_menu;
-UICheckbox analog_am_checkbox;
-UIInputBoxDouble analog_am_freq_input;
-UIInputBoxDouble analog_am_carry_freq_input;
-UIInputBoxDouble analog_am_depth_input;
-UIWidget* analog_am_menu_items[] = {
-    &analog_am_checkbox.base,
-    &analog_am_freq_input.base.base,
-    &analog_am_carry_freq_input.base.base,
-    &analog_am_depth_input.base.base
-};
-
-UIMenu analog_fm_menu;
-UICheckbox analog_fm_checkbox;
-UIInputBoxDouble analog_fm_mod_freq_input;
-UIInputBoxDouble analog_fm_carry_freq_input;
-UIInputBoxDouble analog_fm_offset_input;
-UIWidget* analog_fm_menu_items[] = {
-    &analog_fm_checkbox.base,
-    &analog_fm_mod_freq_input.base.base,
-    &analog_fm_carry_freq_input.base.base,
-    &analog_fm_offset_input.base.base
-};
-
-UIWidget* analog_modulation_menu_items[] = {
-    &analog_am_menu.base,
-    &analog_fm_menu.base
+UICheckbox analog_modulation_checkbox;
+UIChooseBox analog_modulation_type_choose;
+static const char* analog_modulation_type_options[] = { "AM", "FM" };
+UIInputBoxDouble analog_modulation_freq_input;
+UIInputBoxDouble analog_modulation_carry_freq_input;
+UIInputBoxDouble analog_modulation_depth_input;
+UIInputBoxDouble analog_modulation_offset_input;
+static UIWidget* analog_modulation_menu_items[] = {
+    &analog_modulation_checkbox.base,
+    &analog_modulation_type_choose.base.base,
+    &analog_modulation_freq_input.base.base,
+    &analog_modulation_carry_freq_input.base.base,
+    &analog_modulation_depth_input.base.base,
+    &analog_modulation_offset_input.base.base
 };
 
 UIMenu digital_modulation_menu;
 UICheckbox digital_modulation_checkbox;
 UIChooseBox digital_modulation_type_choose;
-const char* digital_modulation_type_options[] = { "ASK", "PSK" };
+static const char* digital_modulation_type_options[] = { "ASK", "PSK" };
 UIInputBoxDouble digital_modulation_carry_freq_input;
 UIInputBoxDouble digital_modulation_bitrate_input;
-UIWidget* digital_modulation_menu_items[] = {
+UIInputBoxBin digital_modulation_data_input;
+static UIWidget* digital_modulation_menu_items[] = {
     &digital_modulation_checkbox.base,
     &digital_modulation_type_choose.base.base,
     &digital_modulation_carry_freq_input.base.base,
-    &digital_modulation_bitrate_input.base.base
+    &digital_modulation_bitrate_input.base.base,
+    &digital_modulation_data_input.base.base
 };
 
-UIWidget* main_menu_items[] = {
+static UIWidget* main_menu_items[] = {
     &simple_output_menu.base,
     &analog_modulation_menu.base,
     &digital_modulation_menu.base
 };
 
-void init_ui()
+static void init_ui()
 {
     ui_key_left = &keyboard_keys[1][0];
     ui_key_up = &keyboard_keys[0][1];
@@ -109,32 +100,15 @@ void init_ui()
 
     // ===== 初始化Analog Modulation菜单 =====
 
-    // ===== 初始化AM菜单 =====
-
-    init_ui_checkbox(&analog_am_checkbox, "Enable", false);
-    init_ui_input_box_double(&analog_am_freq_input, "Mod Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
-    analog_am_freq_input.selected_suffix_index = 1;
-    init_ui_input_box_double(&analog_am_carry_freq_input, "Carr Freq", 1000000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
-    analog_am_carry_freq_input.selected_suffix_index = 2;
-    init_ui_input_box_double(&analog_am_depth_input, "Depth (%)", 50.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 1, true);
-
-    init_ui_menu(&analog_am_menu, "AM", analog_am_menu_items, sizeof(analog_am_menu_items) / sizeof(analog_am_menu_items[0]));
-
-    // ===== 结束AM菜单初始化 =====
-
-    // ===== 初始化FM菜单 =====
-
-    init_ui_checkbox(&analog_fm_checkbox, "Enable", false);
-    init_ui_input_box_double(&analog_fm_mod_freq_input, "Mod Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
-    analog_fm_mod_freq_input.selected_suffix_index = 1;
-    init_ui_input_box_double(&analog_fm_carry_freq_input, "Carr Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
-    analog_fm_carry_freq_input.selected_suffix_index = 2;
-    init_ui_input_box_double(&analog_fm_offset_input, "Freq Offset", 5000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
-    analog_fm_offset_input.selected_suffix_index = 1;
-
-    init_ui_menu(&analog_fm_menu, "FM", analog_fm_menu_items, sizeof(analog_fm_menu_items) / sizeof(analog_fm_menu_items[0]));
-
-    // ===== 结束FM菜单初始化 =====
+    init_ui_checkbox(&analog_modulation_checkbox, "Enable", false);
+    init_ui_choose_box(&analog_modulation_type_choose, "Type", analog_modulation_type_options, sizeof(analog_modulation_type_options) / sizeof(analog_modulation_type_options[0]), 0);
+    init_ui_input_box_double(&analog_modulation_freq_input, "Mod Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
+    analog_modulation_freq_input.selected_suffix_index = 1;
+    init_ui_input_box_double(&analog_modulation_carry_freq_input, "Carr Freq", 1000000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
+    analog_modulation_carry_freq_input.selected_suffix_index = 2;
+    init_ui_input_box_double(&analog_modulation_depth_input, "Depth", 50.0, rate_coeffs, rate_suffixes, sizeof(rate_suffixes) / sizeof(rate_suffixes[0]), 1, true);
+    init_ui_input_box_double(&analog_modulation_offset_input, "Freq Offset", 5000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 2, true);
+    analog_modulation_offset_input.selected_suffix_index = 1;
 
     init_ui_menu(&analog_modulation_menu, "Analog Modulation", analog_modulation_menu_items, sizeof(analog_modulation_menu_items) / sizeof(analog_modulation_menu_items[0]));
 
@@ -148,14 +122,43 @@ void init_ui()
     digital_modulation_carry_freq_input.selected_suffix_index = 1;
     init_ui_input_box_double(&digital_modulation_bitrate_input, "Bitrate", 10000.0, bitrate_coeffs, bitrate_suffixes, sizeof(bitrate_suffixes) / sizeof(bitrate_suffixes[0]), 2, true);
     digital_modulation_bitrate_input.selected_suffix_index = 1;
+    init_ui_input_box_bin(&digital_modulation_data_input, "Data", 0, 8);
 
     init_ui_menu(&digital_modulation_menu, "Digital Modulation", digital_modulation_menu_items, sizeof(digital_modulation_menu_items) / sizeof(digital_modulation_menu_items[0]));
 
     // ===== 结束Digital Modulation菜单初始化 =====
 
-    init_ui_menu(&main_menu, "Main Menu", main_menu_items, sizeof(main_menu_items) / sizeof(main_menu_items[0]));
+    init_ui_menu(&main_menu, "Simple DDS", main_menu_items, sizeof(main_menu_items) / sizeof(main_menu_items[0]));
 
     // ===== 结束主菜单初始化 =====
 
     ui_main_menu = &main_menu;
+
+    // 事件绑定
+
+    // Simple Output事件绑定
+    simple_output_menu.on_enter = on_enter_simple_output_menu;
+    simple_output_menu.on_exit = on_exit_simple_output_menu;
+    simple_output_checkbox.on_value_changed = on_change_simple_output_enabled;
+    simple_output_waveform_choose.on_value_changed = on_change_simple_output_waveform_type;
+    simple_output_freq_input.on_value_changed = on_change_simple_output_freq;
+
+    // Analog Modulation事件绑定
+    analog_modulation_menu.on_enter = on_enter_analog_modulation_menu;
+    analog_modulation_menu.on_exit = on_exit_analog_modulation_menu;
+    analog_modulation_checkbox.on_value_changed = on_change_analog_modulation_enabled;
+    analog_modulation_type_choose.on_value_changed = on_change_analog_modulation_type;
+    analog_modulation_freq_input.on_value_changed = on_change_analog_modulation_signal_freq;
+    analog_modulation_carry_freq_input.on_value_changed = on_change_analog_modulation_carry_freq;
+    analog_modulation_depth_input.on_value_changed = on_change_analog_modulation_depth;
+    analog_modulation_offset_input.on_value_changed = on_change_analog_modulation_offset;
+
+    // Digital Modulation事件绑定
+    digital_modulation_menu.on_enter = on_enter_digital_modulation_menu;
+    digital_modulation_menu.on_exit = on_exit_digital_modulation_menu;
+    digital_modulation_checkbox.on_value_changed = on_change_digital_modulation_enabled;
+    digital_modulation_type_choose.on_value_changed = on_change_digital_modulation_type;
+    digital_modulation_carry_freq_input.on_value_changed = on_change_digital_modulation_carry_freq;
+    digital_modulation_bitrate_input.on_value_changed = on_change_digital_modulation_bitrate;
+    digital_modulation_data_input.on_value_changed = on_change_digital_modulation_data;
 }

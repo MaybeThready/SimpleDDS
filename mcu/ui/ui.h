@@ -33,11 +33,13 @@ struct UIMenu;
 struct UICheckbox;
 struct UIInputBoxDouble;
 struct UIChooseBox;
+struct UIInputBoxBin;
 
 typedef void (*MenuCallbackFunc)(struct UIMenu* menu);
 typedef void (*DoubleChangeCallbackFunc)(struct UIInputBoxDouble* input_box);
 typedef void (*ChooseChangeCallbackFunc)(struct UIChooseBox* choose_box);
 typedef void (*CheckboxChangeCallbackFunc)(struct UICheckbox* checkbox);
+typedef void (*BinChangeCallbackFunc)(struct UIInputBoxBin* input_box);
 
 // UI控件基类
 typedef struct UIWidget
@@ -154,6 +156,17 @@ typedef struct UIChooseBox
     ChooseChangeCallbackFunc on_value_changed;
 } UIChooseBox;
 
+// 二进制输入框
+typedef struct UIInputBoxBin
+{
+    UIPopupButton base;
+    uint32_t value;          // 当前确认的数值
+    uint32_t edit_value;     // 编辑中的临时数值
+    uint8_t bit_length;      // 二进制位数（0~32），决定显示与输入的固定位宽
+    UIInputBoxState state;   // 编辑状态（IDLE或EDITING_INT）
+    BinChangeCallbackFunc on_value_changed;  // 数值确认后的回调
+} UIInputBoxBin;
+
 /**
  * @brief 初始化菜单
  *
@@ -238,6 +251,21 @@ void init_ui_input_box_double(UIInputBoxDouble* input_box, const char* title, do
  * @note options数组及字符串需在选择框生命周期内保持有效
  */
 void init_ui_choose_box(UIChooseBox* choose_box, const char* title, const char** options, uint8_t option_count, uint8_t initial_index);
+
+/**
+ *@brief 初始化二进制输入框
+ *
+ * @param input_box 输入框对象指针
+ * @param title 输入框标题
+ * @param initial_value 初始值
+ * @param bit_length 二进制位数（0~32），决定显示和输入的固定位宽
+ * @note 按数字键0/1输入二进制位，首次按键清空并置为该位，后续按键左移并入新位
+ * @note 超出位宽的位自动丢弃（保留最低bit_length位）
+ * @note 显示时固定位宽，不足高位补零
+ * @note 按确认键保存，按返回键取消并恢复原值
+ * @note title需在输入框生命周期内保持有效
+ */
+void init_ui_input_box_bin(UIInputBoxBin* input_box, const char* title, uint32_t initial_value, uint8_t bit_length);
 
 extern UIMenu* ui_main_menu;  // 主菜单，程序启动后显示的默认菜单
 extern UIWindow* ui_current_window;  // 当前活动的窗口，如果不为NULL则显示该窗口并优先处理其输入，直到窗口退出后才会继续显示菜单

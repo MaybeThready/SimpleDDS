@@ -36,6 +36,7 @@ Key* ui_key_9 = &keyboard_null_key;
 Key* ui_key_point = &keyboard_null_key;
 
 void init_ui_widget(UIWidget* widget);
+void init_ui_window(UIWindow* window, const char* title);
 static uint16_t ui_text_width(const char* text);
 static uint8_t ui_calc_int_length(double display_value);
 static double ui_input_box_get_coeff(const UIInputBoxDouble* input_box, uint8_t index);
@@ -389,14 +390,65 @@ static void ui_menu_enter(UIWidget* self)
 }
 
 /**
- *@brief UIMenu成员函数：根据当前选中项更新光标目标区域
+ *@brief UIMenu成员函数：根据当前选中项更新光标目标区域，并在菜单项超出屏幕时自动滚动
  *
  * @param menu UIMenu对象指针
+ * @note 当菜单项总数超出屏幕可视区域时，会根据选中项位置自动调整 anchor.target_y
+ * @note 滚动动画使用与 UI 模块统一的非线性插值（ui_widget_step），保证动画风格一致
  */
 static void ui_menu_update_cursor(UIMenu* menu)
 {
     UIWidget* selected_item = menu->items[menu->selected_index];
     float anchor_x = menu->anchor.should_move ? menu->anchor.target_x : menu->anchor.x;
+
+    /* ===== 自动滚动逻辑：当菜单项超出屏幕时，根据选中项位置自动调整垂直偏移 ===== */
+    if (menu->item_count > 0)
+    {
+        int16_t visible_top = ui_font_height + UI_V_MARGIN;               /* 可视区域顶部（标题栏下方） */
+        int16_t visible_bottom = OLED_HEIGHT - UI_V_MARGIN;                /* 可视区域底部 */
+        int16_t visible_height = visible_bottom - visible_top;             /* 可视区域高度 */
+        int16_t item_step = ui_font_height + UI_V_MARGIN;                  /* 每个菜单项占用的高度（含间距） */
+        int16_t total_content_height = menu->item_count * item_step;       /* 菜单内容总高度 */
+
+        if (total_content_height > visible_height)
+        {
+            /* 内容超出屏幕，根据选中项位置计算目标滚动偏移 */
+            int16_t item_offset = menu->selected_index * item_step;        /* 选中项相对于第一项的偏移 */
+            float target_item_y = menu->anchor.target_y + visible_top + item_offset; /* 选中项在目标位置的屏幕Y坐标 */
+
+            if (target_item_y < visible_top)
+            {
+                /* 选中项在可视区域上方，向上滚动使其对齐到可视区域顶部 */
+                menu->anchor.target_y = (float)(-item_offset);
+            }
+            else if (target_item_y + ui_font_height > visible_bottom)
+            {
+                /* 选中项在可视区域下方，向下滚动使其底部对齐到可视区域底部 */
+                menu->anchor.target_y = (float)(visible_bottom - ui_font_height - visible_top - item_offset);
+            }
+
+            /* 限制滚动范围：不允许滚动到第一项之上（anchor.y > 0 会露出顶部空白） */
+            if (menu->anchor.target_y > 0.f)
+            {
+                menu->anchor.target_y = 0.f;
+            }
+
+            /* 限制滚动范围：不允许最后一项之下留出过多空白 */
+            float min_anchor_y = (float)(visible_bottom - ui_font_height - visible_top - (menu->item_count - 1) * item_step);
+            if (min_anchor_y > 0.f)
+            {
+                min_anchor_y = 0.f;  /* 内容未超出屏幕，无需滚动 */
+            }
+            if (menu->anchor.target_y < min_anchor_y)
+            {
+                menu->anchor.target_y = min_anchor_y;
+            }
+
+            menu->anchor.should_move = true;  /* 触发非线性滚动动画 */
+        }
+    }
+    /* ===== 自动滚动逻辑结束 ===== */
+
     ui_cursor.target_x = anchor_x;
     ui_cursor.target_y = selected_item->target_y - UI_V_MARGIN / 2;
     ui_cursor.target_width = OLED_WIDTH;
@@ -426,15 +478,6 @@ void ui_menu_render_items(UIMenu* menu)
         menu->process_input(menu);
     }
 
-    oled_draw_rectangle((int16_t)menu->anchor.x, 0, (int16_t)(ui_ascii_size / 2), ui_font_height, true);
-    oled_show_mix_string(
-        (int16_t)(menu->anchor.x + ui_ascii_size),
-        0,
-        menu->title,
-        ui_chinese_size,
-        ui_ascii_size
-    );
-
     UIWidget* item;
     for (uint8_t i = 0; i < menu->item_count; i++)
     {
@@ -443,6 +486,23 @@ void ui_menu_render_items(UIMenu* menu)
         {
             item->render(item);
         }
+    }
+
+    /* 菜单标题栏：仅当此菜单为活跃菜单或过渡中的菜单时才渲染标题栏。
+     * 在 items 之后渲染，确保标题栏遮挡住因滚动而溢出到标题区域的菜单项。
+     * 必须在弹窗之前渲染，否则弹窗区域会被菜单标题覆盖。
+     * 仅活跃/过渡菜单渲染标题栏，避免嵌套菜单的标题栏互相覆盖。 */
+    if (menu == ui_active_menu || menu == ui_transition_menu)
+    {
+        oled_clear_area((int16_t)menu->anchor.x, 0, OLED_WIDTH, ui_font_height);
+        oled_draw_rectangle((int16_t)menu->anchor.x, 0, (int16_t)(ui_ascii_size / 2), ui_font_height, true);
+        oled_show_mix_string(
+            (int16_t)(menu->anchor.x + ui_ascii_size),
+            0,
+            menu->title,
+            ui_chinese_size,
+            ui_ascii_size
+        );
     }
 
     if (menu == ui_active_menu && ui_current_window != NULL)
@@ -461,6 +521,12 @@ void ui_menu_render_items(UIMenu* menu)
 
     if (menu == ui_active_menu)
     {
+        /* 如果锚点正在移动（过渡动画或滚动中），实时更新光标位置以跟随菜单项 */
+        if (menu->anchor.should_move)
+        {
+            ui_menu_update_cursor(menu);
+        }
+
         if (ui_cursor.should_move)
         {
             ui_widget_step(&ui_cursor);
@@ -1373,6 +1439,195 @@ void ui_choose_box_window_process_input(UIWindow* self)
         choose_box->base.window.is_exiting = true;
         choose_box->base.window.base.should_move = true;
     }
+}
+
+/**
+ *@brief UIInputBoxBin成员函数：渲染二进制输入框在菜单中的显示
+ *
+ * @param self UIWidget对象指针（指向UIInputBoxBin.base.base）
+ * @note 标题左对齐，二进制数值右对齐显示在菜单项右侧
+ */
+void ui_input_box_bin_render(UIWidget* self)
+{
+    UIInputBoxBin* input_box = container_of(self, UIInputBoxBin, base);
+    ui_popup_button_render(&input_box->base.base);
+
+    /* 计算二进制数字显示宽度并在菜单项区域内右对齐 */
+    uint16_t bin_width = input_box->bit_length * ui_ascii_size;
+    int16_t bin_x = OLED_WIDTH - UI_H_MARGIN - bin_width;
+
+    oled_show_bin_num_area(
+        input_box->base.base.x,
+        input_box->base.base.y,
+        input_box->base.base.width,
+        input_box->base.base.height,
+        bin_x,
+        input_box->base.base.y,
+        (int32_t)input_box->value,
+        input_box->bit_length,
+        ui_ascii_size
+    );
+}
+
+/**
+ *@brief UIInputBoxBin成员函数：更新输入框弹窗内的光标位置
+ *
+ * @param input_box UIInputBoxBin对象指针
+ * @note 光标覆盖二进制数字显示区域，使其高亮
+ */
+static void ui_input_box_bin_update_cursor(UIInputBoxBin* input_box)
+{
+    uint16_t bin_width = input_box->bit_length * ui_ascii_size;
+    int16_t content_y = (int16_t)(input_box->base.window.base.y + UI_H_MARGIN + 1 + ui_font_height + UI_V_MARGIN);
+
+    /* 计算窗口有效宽度（动画中取目标值） */
+    int16_t window_width = (int16_t)input_box->base.window.base.width;
+    if (input_box->base.window.base.target_width > window_width)
+    {
+        window_width = (int16_t)input_box->base.window.base.target_width;
+    }
+
+    /* 二进制数字在窗口内居中 */
+    int16_t bin_x = (int16_t)(input_box->base.window.base.x + (window_width - bin_width) / 2);
+
+    ui_cursor.target_x = bin_x - UI_H_MARGIN;
+    ui_cursor.target_y = content_y - UI_V_MARGIN / 2;
+    ui_cursor.target_width = bin_width + UI_H_MARGIN * 2;
+    ui_cursor.target_height = (int16_t)ui_font_height + UI_V_MARGIN;
+    ui_cursor.should_move = true;
+}
+
+/**
+ *@brief UIInputBoxBin成员函数：进入二进制输入框并初始化编辑状态
+ *
+ * @param self UIWidget对象指针（指向UIInputBoxBin.base.base）
+ */
+void ui_input_box_bin_enter(UIWidget* self)
+{
+    UIInputBoxBin* input_box = container_of(self, UIInputBoxBin, base);
+    ui_popup_button_enter(&input_box->base.base);
+
+    input_box->edit_value = input_box->value;
+    input_box->state = UI_INPUT_BOX_IDLE;
+    ui_input_box_bin_update_cursor(input_box);
+}
+
+/**
+ *@brief UIInputBoxBin成员函数：渲染二进制输入框弹窗内容
+ *
+ * @param self UIWindow对象指针（指向UIInputBoxBin.base.window）
+ * @note 在窗口标题下方居中显示二进制数值（固定bit_length位，不足高位补零）
+ */
+void ui_input_box_bin_window_render_items(UIWindow* self)
+{
+    UIInputBoxBin* input_box = container_of(self, UIInputBoxBin, base.window);
+    ui_popup_button_window_render_items(&input_box->base.window);
+
+    /* 计算二进制数字居中位置 */
+    uint16_t bin_width = input_box->bit_length * ui_ascii_size;
+    int16_t content_y = (int16_t)(input_box->base.window.base.y + UI_H_MARGIN + 1 + ui_font_height + UI_V_MARGIN);
+    int16_t window_width = (int16_t)input_box->base.window.base.width;
+    if (input_box->base.window.base.target_width > window_width)
+    {
+        window_width = (int16_t)input_box->base.window.base.target_width;
+    }
+    int16_t bin_x = (int16_t)(input_box->base.window.base.x + (window_width - bin_width) / 2);
+
+    oled_show_bin_num_area(
+        input_box->base.window.base.x,
+        input_box->base.window.base.y,
+        input_box->base.window.base.width,
+        input_box->base.window.base.height,
+        bin_x,
+        content_y,
+        (int32_t)input_box->edit_value,
+        input_box->bit_length,
+        ui_ascii_size
+    );
+}
+
+/**
+ *@brief UIInputBoxBin成员函数：处理二进制输入框弹窗输入
+ *
+ * @param self UIWindow对象指针（指向UIInputBoxBin.base.window）
+ * @note 按数字键0/1输入：首次按键清空并置为该位，后续按键左移并入新位
+ * @note 超出位宽的位自动丢弃
+ * @note 按确认键保存值并关闭弹窗，按返回键取消并恢复原值
+ */
+void ui_input_box_bin_window_process_input(UIWindow* self)
+{
+    UIInputBoxBin* input_box = container_of(self, UIInputBoxBin, base.window);
+
+    if (ui_key_back->signal_event == KEY_PRESS)
+    {
+        /* 取消编辑，恢复原值 */
+        input_box->edit_value = input_box->value;
+        input_box->state = UI_INPUT_BOX_IDLE;
+        ui_popup_button_window_process_input(&input_box->base.window);
+        return;
+    }
+
+    ui_popup_button_window_process_input(&input_box->base.window);
+
+    /* 获取数字键输入（仅0和1有效） */
+    uint8_t digit = get_digit_input();
+    if (digit == 0 || digit == 1)
+    {
+        /* 计算bit_length位的掩码，确保值不超出位宽 */
+        uint32_t mask = (input_box->bit_length >= 32) ? 0xFFFFFFFFUL : ((1UL << input_box->bit_length) - 1);
+
+        if (input_box->state == UI_INPUT_BOX_IDLE)
+        {
+            /* 首次输入，清空并以该位作为起始值 */
+            input_box->edit_value = digit & mask;
+            input_box->state = UI_INPUT_BOX_EDITING_INT;
+        }
+        else
+        {
+            /* 左移并入新位，超出位宽的位自动丢弃 */
+            input_box->edit_value = ((input_box->edit_value << 1) | digit) & mask;
+        }
+        ui_input_box_bin_update_cursor(input_box);
+    }
+
+    if (ui_key_enter->signal_event == KEY_PRESS)
+    {
+        /* 确认编辑，保存值并关闭弹窗 */
+        input_box->value = input_box->edit_value;
+        if (input_box->on_value_changed != NULL)
+        {
+            input_box->on_value_changed(input_box);
+        }
+        input_box->state = UI_INPUT_BOX_IDLE;
+        input_box->base.window.base.target_width = 0.f;
+        input_box->base.window.base.target_height = 0.f;
+        input_box->base.window.is_exiting = true;
+        input_box->base.window.base.should_move = true;
+    }
+}
+
+/**
+ *@brief UIInputBoxBin成员函数：初始化二进制输入框
+ *
+ * @param input_box 输入框对象指针
+ * @param title 输入框标题
+ * @param initial_value 初始值
+ * @param bit_length 二进制位数（0~32），决定显示和输入的固定位宽
+ */
+void init_ui_input_box_bin(UIInputBoxBin* input_box, const char* title, uint32_t initial_value, uint8_t bit_length)
+{
+    init_ui_popup_button(&input_box->base, title);
+    input_box->base.base.enter = ui_input_box_bin_enter;
+    input_box->base.base.render = ui_input_box_bin_render;
+    init_ui_window(&input_box->base.window, title);
+    input_box->base.window.render = ui_input_box_bin_window_render_items;
+    input_box->base.window.process_input = ui_input_box_bin_window_process_input;
+
+    input_box->value = initial_value;
+    input_box->edit_value = initial_value;
+    input_box->bit_length = (bit_length > 32) ? 32 : bit_length;
+    input_box->state = UI_INPUT_BOX_IDLE;
+    input_box->on_value_changed = NULL;
 }
 
 /**

@@ -274,6 +274,21 @@ void oled_show_num_area(int16_t area_x, int16_t area_y, int16_t area_width, int1
 void oled_show_float_num_area(int16_t area_x, int16_t area_y, int16_t area_width, int16_t area_height, int16_t x, int16_t y, double num, uint8_t int_length, uint8_t frac_length, bool ignore_positive_sgn, OLEDFontSizeHalf size);
 
 /**
+ *@brief 显示二进制数
+
+ * @param area_x 区域左上角x坐标
+ * @param area_y 区域左上角y坐标
+ * @param area_width 区域宽度
+ * @param area_height 区域高度
+ * @param x 数字左上角x坐标
+ * @param y 数字左上角y坐标
+ * @param num 要显示的数字
+ * @param length 数字的长度，即显示多少位
+ * @param size 数字大小，只能为半角字符大小
+ */
+void oled_show_bin_num_area(int16_t area_x, int16_t area_y, int16_t area_width, int16_t area_height, int16_t x, int16_t y, int32_t num, uint8_t length, OLEDFontSizeHalf size);
+
+/**
  *@brief 绘制点
  * 
  * @param x 点的x坐标

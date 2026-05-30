@@ -414,6 +414,16 @@
               <FileType>5</FileType>
               <FilePath>..\ui_config.h</FilePath>
             </File>
+            <File>
+              <FileName>events.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\events.c</FilePath>
+            </File>
+            <File>
+              <FileName>events.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\events.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

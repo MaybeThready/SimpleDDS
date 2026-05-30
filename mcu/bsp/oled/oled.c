@@ -735,6 +735,15 @@ void oled_show_float_num_area(int16_t area_x, int16_t area_y, int16_t area_width
 	oled_show_num_area(area_x, area_y, area_width, area_height, x + (int_length + 2) * size, y, frac_num, frac_length, size);
 }
 
+void oled_show_bin_num_area(int16_t area_x, int16_t area_y, int16_t area_width, int16_t area_height, int16_t x, int16_t y, int32_t num, uint8_t length, OLEDFontSizeHalf size)
+{
+	uint8_t i;
+	for (i = 0; i < length; i++)		//遍历数字的每一位
+	{
+		oled_show_char_area(area_x, area_y, area_width, area_height, x + i * size, y, num / oled_pow(2, length - i - 1) % 2 + '0', size);
+	}
+}
+
 void oled_draw_point(int16_t x, int16_t y)
 {
 	/*参数检查，保证指定位置不会超出屏幕范围*/

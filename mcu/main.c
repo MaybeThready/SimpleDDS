@@ -1,6 +1,7 @@
 #include "ti_msp_dl_config.h"
 #include "bsp/msp_sys.h"
 #include "bsp/keyboard.h"
+#include "bsp/uart.h"
 #include "ui_config.h"
 
 int main()
@@ -10,6 +11,7 @@ int main()
     init_oled();
     init_ui();
     init_keyboard();
+    init_uart();
 
     while (1)
     {
