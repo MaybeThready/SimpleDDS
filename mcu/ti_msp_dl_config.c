@@ -157,17 +157,16 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
-    DL_GPIO_initDigitalOutput(OLED_DC_IOMUX);
+    DL_GPIO_initDigitalOutput(OLED_RES_IOMUX);
 
     DL_GPIO_initDigitalOutput(OLED_CS_IOMUX);
 
-    DL_GPIO_initDigitalOutput(OLED_RES_IOMUX);
+    DL_GPIO_initDigitalOutput(OLED_DC_IOMUX);
 
     DL_GPIO_setPins(GPIOA, LED_L1_PIN |
 		LED_L2_PIN);
     DL_GPIO_enableOutput(GPIOA, LED_L1_PIN |
 		LED_L2_PIN);
-    DL_GPIO_clearPins(GPIOB, OLED_RES_PIN);
     DL_GPIO_setPins(GPIOB, LED_L3_PIN |
 		LED_L4_PIN |
 		LED_L5_PIN |
@@ -175,7 +174,8 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		KEYBOARD_H1_PIN |
 		KEYBOARD_H2_PIN |
 		KEYBOARD_H3_PIN |
-		KEYBOARD_H4_PIN);
+		KEYBOARD_H4_PIN |
+		OLED_RES_PIN);
     DL_GPIO_enableOutput(GPIOB, LED_L3_PIN |
 		LED_L4_PIN |
 		LED_L5_PIN |
@@ -185,53 +185,46 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		KEYBOARD_H3_PIN |
 		KEYBOARD_H4_PIN |
 		OLED_RES_PIN);
-    DL_GPIO_clearPins(GPIOC, OLED_DC_PIN |
-		OLED_CS_PIN);
     DL_GPIO_setPins(GPIOC, LED_L7_PIN |
-		LED_L8_PIN);
+		LED_L8_PIN |
+		OLED_CS_PIN |
+		OLED_DC_PIN);
     DL_GPIO_enableOutput(GPIOC, LED_L7_PIN |
 		LED_L8_PIN |
-		OLED_DC_PIN |
-		OLED_CS_PIN);
+		OLED_CS_PIN |
+		OLED_DC_PIN);
 
 }
 
 
 static const DL_SYSCTL_SYSPLLConfig gSYSPLLConfig = {
-    .inputFreq              = DL_SYSCTL_SYSPLL_INPUT_FREQ_32_48_MHZ,
-	.rDivClk2x              = 1,
-	.rDivClk1               = 0,
+    .inputFreq              = DL_SYSCTL_SYSPLL_INPUT_FREQ_16_32_MHZ,
+	.rDivClk2x              = 3,
+	.rDivClk1               = 1,
 	.rDivClk0               = 0,
-	.enableCLK2x            = DL_SYSCTL_SYSPLL_CLK2X_DISABLE,
+	.enableCLK2x            = DL_SYSCTL_SYSPLL_CLK2X_ENABLE,
 	.enableCLK1             = DL_SYSCTL_SYSPLL_CLK1_DISABLE,
-	.enableCLK0             = DL_SYSCTL_SYSPLL_CLK0_ENABLE,
-	.sysPLLMCLK             = DL_SYSCTL_SYSPLL_MCLK_CLK0,
-	.sysPLLRef              = DL_SYSCTL_SYSPLL_REF_HFCLK,
-	.qDiv                   = 3,
-	.pDiv                   = DL_SYSCTL_SYSPLL_PDIV_1
+	.enableCLK0             = DL_SYSCTL_SYSPLL_CLK0_DISABLE,
+	.sysPLLMCLK             = DL_SYSCTL_SYSPLL_MCLK_CLK2X,
+	.sysPLLRef              = DL_SYSCTL_SYSPLL_REF_SYSOSC,
+	.qDiv                   = 9,
+	.pDiv                   = DL_SYSCTL_SYSPLL_PDIV_2
 };
 SYSCONFIG_WEAK void SYSCFG_DL_SYSCTL_init(void)
 {
 
 	//Low Power Mode is configured to be SLEEP0
     DL_SYSCTL_setBORThreshold(DL_SYSCTL_BOR_THRESHOLD_LEVEL_0);
-    DL_SYSCTL_setFlashWaitState(DL_SYSCTL_FLASH_WAIT_STATE_1);
+    DL_SYSCTL_setFlashWaitState(DL_SYSCTL_FLASH_WAIT_STATE_2);
 
     
 	DL_SYSCTL_setSYSOSCFreq(DL_SYSCTL_SYSOSC_FREQ_BASE);
 	/* Set default configuration */
 	DL_SYSCTL_disableHFXT();
 	DL_SYSCTL_disableSYSPLL();
-    DL_SYSCTL_setHFCLKSourceHFXTParams(DL_SYSCTL_HFXT_RANGE_32_48_MHZ,0, false);
     DL_SYSCTL_configSYSPLL((DL_SYSCTL_SYSPLLConfig *) &gSYSPLLConfig);
     DL_SYSCTL_setULPCLKDivider(DL_SYSCTL_ULPCLK_DIV_2);
-    DL_SYSCTL_setHFCLKDividerForMFPCLK(DL_SYSCTL_HFCLK_MFPCLK_DIVIDER_10);
-    DL_SYSCTL_enableMFCLK();
-    DL_SYSCTL_enableMFPCLK();
-	DL_SYSCTL_setMFPCLKSource(DL_SYSCTL_MFPCLK_SOURCE_HFCLK);
     DL_SYSCTL_setMCLKSource(SYSOSC, HSCLK, DL_SYSCTL_HSCLK_SOURCE_SYSPLL);
-    /* Enable interrupt for Flash Command execution is complete */
-    DL_FlashCTL_enableInterrupt(FLASHCTL);
 
 }
 
@@ -307,5 +300,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_SPI_0_init(void) {
 SYSCONFIG_WEAK void SYSCFG_DL_SYSTICK_init(void)
 {
     DL_SYSTICK_enableInterrupt();
+    NVIC_SetPriority(SysTick_IRQn, 0);
 }
 
