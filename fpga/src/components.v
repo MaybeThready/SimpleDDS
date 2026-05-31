@@ -60,14 +60,14 @@ module DIV(
     end
 endmodule
 
-// 数码管显示器
+// BCD数码管显示器
 // clk: 时钟信号
 // rstn: 复位信号，低电平有效
 // bcd: 24位BCD码输入，表示6位十进制数，每4位表示一个数字
 // dots: 6位小数点控制信号，1表示对应位的小数点亮起，0表示不亮
 // sel: 数码管位选信号，6位，低电平有效
 // seg: 数码管段选信号，8位，低电平有效，最高位为小数点
-module DGT(
+module BCDDGT(
     input               clk, rstn,
     input       [23:0]  bcd,
     input       [5:0]   dots,
@@ -108,16 +108,87 @@ module DGT(
               (sel == 6'b101111) ? dots[4] :
               (sel == 6'b011111) ? dots[5] : 1'b0;
         case (dig_seg)
-            0: seg = {dot, _0};
-            1: seg = {dot, _1};
-            2: seg = {dot, _2};
-            3: seg = {dot, _3};
-            4: seg = {dot, _4};
-            5: seg = {dot, _5};
-            6: seg = {dot, _6};
-            7: seg = {dot, _7};
-            8: seg = {dot, _8};
-            9: seg = {dot, _9};
+            4'd0: seg = {dot, _0};
+            4'd1: seg = {dot, _1};
+            4'd2: seg = {dot, _2};
+            4'd3: seg = {dot, _3};
+            4'd4: seg = {dot, _4};
+            4'd5: seg = {dot, _5};
+            4'd6: seg = {dot, _6};
+            4'd7: seg = {dot, _7};
+            4'd8: seg = {dot, _8};
+            4'd9: seg = {dot, _9};
+            default: seg = {dot, _X};
+        endcase
+    end
+endmodule
+
+// HEX数码管显示器
+// clk: 时钟信号
+// rstn: 复位信号，低电平有效
+// hex: 24位十六进制码输入，表示6位十六进制数，每4位表示一个数字
+// dots: 6位小数点控制信号，1表示对应位的小数点亮起，0表示不亮
+// sel: 数码管位选信号，6位，低电平有效
+// seg: 数码管段选信号，8位，低电平有效，最高位为小数点
+module HEXDGT(
+    input               clk, rstn,
+    input       [23:0]  hex,
+    input       [5:0]   dots,
+    output  reg [5:0]   sel,
+    output  reg [7:0]   seg
+);
+    parameter _0 = 7'b0111111, _1 = 7'b0000110, _2 = 7'b1011011,
+              _3 = 7'b1001111, _4 = 7'b1100110, _5 = 7'b1101101,
+              _6 = 7'b1111101, _7 = 7'b0000111, _8 = 7'b1111111,
+              _9 = 7'b1101111, _A = 7'b1110111, _B = 7'b1111100,
+              _C = 7'b0111001, _D = 7'b1011110, _E = 7'b1111001,
+              _F = 7'b1110001, _X = 7'b0000000;
+
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn)
+            sel <= 6'b111111;
+        else
+            sel <= (sel == 6'b111111) ? 6'b111110 : {sel[4:0], sel[5]};
+    end
+    
+    reg [3:0] dig_seg;
+    always @(*) begin
+        case (sel)
+            6'b111110: dig_seg = hex[3:0];
+            6'b111101: dig_seg = hex[7:4];
+            6'b111011: dig_seg = hex[11:8];
+            6'b110111: dig_seg = hex[15:12];
+            6'b101111: dig_seg = hex[19:16];
+            6'b011111: dig_seg = hex[23:20]; 
+            default: dig_seg = 4'b1111;
+        endcase
+    end
+ 
+    reg dot;
+    always @(*) begin
+        dot = (sel == 6'b111110) ? dots[0] :
+              (sel == 6'b111101) ? dots[1] :
+              (sel == 6'b111011) ? dots[2] :
+              (sel == 6'b110111) ? dots[3] :
+              (sel == 6'b101111) ? dots[4] :
+              (sel == 6'b011111) ? dots[5] : 1'b0;
+        case (dig_seg)
+            4'd0: seg = {dot, _0};
+            4'd1: seg = {dot, _1};
+            4'd2: seg = {dot, _2};
+            4'd3: seg = {dot, _3};
+            4'd4: seg = {dot, _4};
+            4'd5: seg = {dot, _5};
+            4'd6: seg = {dot, _6};
+            4'd7: seg = {dot, _7};
+            4'd8: seg = {dot, _8};
+            4'd9: seg = {dot, _9};
+            4'd10: seg = {dot, _A};
+            4'd11: seg = {dot, _B};
+            4'd12: seg = {dot, _C};
+            4'd13: seg = {dot, _D};
+            4'd14: seg = {dot, _E};
+            4'd15: seg = {dot, _F};
             default: seg = {dot, _X};
         endcase
     end
@@ -173,3 +244,152 @@ module FSM
             stc <= stn;
     end
 endmodule
+
+module UARTReceiver
+(
+    input clk, rstn, rx,
+    output reg [7:0] data,
+    output reg done
+);
+    parameter BAUD_RATE = 9600;
+    parameter CLK_FREQ = 100_000_000;
+    parameter BIT_PERIOD = CLK_FREQ / BAUD_RATE;
+    parameter IDLE = 2'b00, START = 2'b01, DATA = 2'b10, STOP = 2'b11;
+
+    localparam integer BIT_PERIOD_I = BIT_PERIOD;
+    localparam integer HALF_PERIOD_I = (BIT_PERIOD_I >> 1);
+    localparam integer TICK_W = $clog2(BIT_PERIOD_I);
+
+    // 同步接收信号，避免亚稳态
+    reg rx_sync_0, rx_sync;
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            rx_sync_0 <= 1'b1;
+            rx_sync <= 1'b1;
+        end
+        else begin
+            rx_sync_0 <= rx;
+            rx_sync <= rx_sync_0;
+        end
+    end
+
+    wire [TICK_W-1:0] tick_count;
+    reg [2:0] bit_index = 3'd0;
+    reg rx_sync_prev = 1'b1;
+
+    reg tick_rstn = 1'b0;
+    wire tick_carry;
+    CTU #(BIT_PERIOD_I, 0) tick_counter(
+        .clk(clk),
+        .rstn(tick_rstn),
+        .count(tick_count),
+        .carry(tick_carry)
+    );
+
+    reg [1:0] stn;
+    wire [1:0] stc;
+    FSM #(4) fsm_inst(
+        .clk(clk),
+        .rstn(rstn),
+        .stn(stn),
+        .initial_state(IDLE),
+        .stc(stc)
+    );
+
+    // 状态转移逻辑
+    always @(*) begin
+        stn = stc;
+        case (stc)
+            IDLE: begin
+                if (rx_sync_prev == 1'b1 && rx_sync == 1'b0) begin
+                    stn = START;
+                end
+            end
+
+            START: begin
+                if (tick_count == HALF_PERIOD_I[TICK_W-1:0]) begin
+                    if (rx_sync == 1'b0) begin
+                        stn = DATA;
+                    end
+                    else begin
+                        stn = IDLE; // false start
+                    end
+                end
+            end
+
+            DATA: begin
+                if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1 && bit_index == 3'd7) begin
+                    stn = STOP;
+                end
+            end
+
+            STOP: begin
+                if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1) begin
+                    stn = IDLE;
+                end
+            end
+
+            default: begin
+                stn = IDLE;
+            end
+        endcase
+    end
+
+    // 状态输出逻辑
+    // 在单一时钟域内完成采样，避免跨时钟域误差
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            bit_index <= 3'd0;
+            data <= 8'b0;
+            done <= 1'b0;
+            rx_sync_prev <= 1'b1;
+            tick_rstn <= 1'b0;
+        end
+        else begin
+            done <= 1'b0;
+            rx_sync_prev <= rx_sync;
+
+            case (stc)
+                IDLE: begin
+                    bit_index <= 3'd0;
+                    tick_rstn <= 1'b0;
+                end
+
+                START: begin
+                    if (tick_count == HALF_PERIOD_I[TICK_W-1:0] && rx_sync == 1'b0) begin
+                        tick_rstn <= 1'b0; // 对齐数据位采样相位
+                    end
+                    else begin
+                        tick_rstn <= 1'b1;
+                    end
+                end
+
+                DATA: begin
+                    tick_rstn <= 1'b1;
+                    if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1) begin
+                        data[bit_index] <= rx_sync;
+                        if (bit_index == 3'd7) begin
+                            bit_index <= 3'd0;
+                        end
+                        else begin
+                            bit_index <= bit_index + 1'b1;
+                        end
+                    end
+                end
+
+                STOP: begin
+                    tick_rstn <= 1'b1;
+                    if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1) begin
+                        done <= 1'b1;
+                    end
+                end
+
+                default: begin
+                    bit_index <= 3'd0;
+                    tick_rstn <= 1'b0;
+                end
+            endcase
+        end
+    end
+endmodule
+

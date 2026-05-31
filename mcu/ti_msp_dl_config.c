@@ -53,6 +53,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     /* Module-Specific Initializations*/
     SYSCFG_DL_SYSCTL_init();
     SYSCFG_DL_DEFAULT_UART_init();
+    SYSCFG_DL_DDS_UART_init();
     SYSCFG_DL_SPI_0_init();
     SYSCFG_DL_SYSTICK_init();
     /* Ensure backup structures have no valid state */
@@ -89,6 +90,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_reset(GPIOB);
     DL_GPIO_reset(GPIOC);
     DL_UART_Main_reset(DEFAULT_UART_INST);
+    DL_UART_Main_reset(DDS_UART_INST);
     DL_SPI_reset(SPI_0_INST);
 
 
@@ -96,6 +98,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_enablePower(GPIOB);
     DL_GPIO_enablePower(GPIOC);
     DL_UART_Main_enablePower(DEFAULT_UART_INST);
+    DL_UART_Main_enablePower(DDS_UART_INST);
     DL_SPI_enablePower(SPI_0_INST);
 
     delay_cycles(POWER_STARTUP_DELAY);
@@ -111,6 +114,10 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
         GPIO_DEFAULT_UART_IOMUX_TX, GPIO_DEFAULT_UART_IOMUX_TX_FUNC);
     DL_GPIO_initPeripheralInputFunction(
         GPIO_DEFAULT_UART_IOMUX_RX, GPIO_DEFAULT_UART_IOMUX_RX_FUNC);
+    DL_GPIO_initPeripheralOutputFunction(
+        GPIO_DDS_UART_IOMUX_TX, GPIO_DDS_UART_IOMUX_TX_FUNC);
+    DL_GPIO_initPeripheralInputFunction(
+        GPIO_DDS_UART_IOMUX_RX, GPIO_DDS_UART_IOMUX_RX_FUNC);
 
     DL_GPIO_initPeripheralOutputFunction(
         GPIO_SPI_0_IOMUX_SCLK, GPIO_SPI_0_IOMUX_SCLK_FUNC);
@@ -263,6 +270,37 @@ SYSCONFIG_WEAK void SYSCFG_DL_DEFAULT_UART_init(void)
 
 
     DL_UART_Main_enable(DEFAULT_UART_INST);
+}
+static const DL_UART_Main_ClockConfig gDDS_UARTClockConfig = {
+    .clockSel    = DL_UART_MAIN_CLOCK_BUSCLK,
+    .divideRatio = DL_UART_MAIN_CLOCK_DIVIDE_RATIO_1
+};
+
+static const DL_UART_Main_Config gDDS_UARTConfig = {
+    .mode        = DL_UART_MAIN_MODE_NORMAL,
+    .direction   = DL_UART_MAIN_DIRECTION_TX_RX,
+    .flowControl = DL_UART_MAIN_FLOW_CONTROL_NONE,
+    .parity      = DL_UART_MAIN_PARITY_NONE,
+    .wordLength  = DL_UART_MAIN_WORD_LENGTH_8_BITS,
+    .stopBits    = DL_UART_MAIN_STOP_BITS_ONE
+};
+
+SYSCONFIG_WEAK void SYSCFG_DL_DDS_UART_init(void)
+{
+    DL_UART_Main_setClockConfig(DDS_UART_INST, (DL_UART_Main_ClockConfig *) &gDDS_UARTClockConfig);
+
+    DL_UART_Main_init(DDS_UART_INST, (DL_UART_Main_Config *) &gDDS_UARTConfig);
+    /*
+     * Configure baud rate by setting oversampling and baud rate divisors.
+     *  Target baud rate: 9600
+     *  Actual baud rate: 9599.81
+     */
+    DL_UART_Main_setOversampling(DDS_UART_INST, DL_UART_OVERSAMPLING_RATE_16X);
+    DL_UART_Main_setBaudRateDivisor(DDS_UART_INST, DDS_UART_IBRD_40_MHZ_9600_BAUD, DDS_UART_FBRD_40_MHZ_9600_BAUD);
+
+
+
+    DL_UART_Main_enable(DDS_UART_INST);
 }
 
 static const DL_SPI_Config gSPI_0_config = {

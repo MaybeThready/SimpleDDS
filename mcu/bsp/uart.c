@@ -13,10 +13,12 @@ void uart_send_byte(uint8_t data, bool blocking)
     if (blocking)
     {
         DL_UART_transmitDataBlocking(UART_INST, data);
+        DL_UART_transmitDataBlocking(DDS_UART_INST, data);
     }
     else
     {
         DL_UART_transmitData(UART_INST, data);
+        DL_UART_transmitData(DDS_UART_INST, data);
     }
 }
 
