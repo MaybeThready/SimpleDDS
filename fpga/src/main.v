@@ -62,10 +62,12 @@ module main
     reg [23:0] method1_freq_mod = 24'd1000;
     reg [7:0] method1_am_rate = 8'd100;
     reg [23:0] method1_fm_offset = 24'd5000;
+    reg method1_mode = 1'b0;
 
     reg [23:0] method2_freq_carry = 24'd1000_000;
     reg [15:0] method2_bitrate = 16'd10_000;
     reg [7:0] method2_digital_signal = 8'b00000000;
+    reg method2_mode = 1'b0;
 
     wire [13:0] method0_signal, method1_signal, method2_signal;
     reg [1:0] out_channel = 2'b11;
@@ -86,11 +88,13 @@ module main
                         method1_freq_mod <= freq2;
                         method1_am_rate <= param[7:0];
                         method1_fm_offset <= param;
+                        method1_mode <= ctw[4];
                     end
                     2'b10: begin
                         method2_freq_carry <= freq1;
                         method2_bitrate <= freq2[15:0];
                         method2_digital_signal <= param[7:0];
+                        method2_mode <= ctw[4];
                     end
                     default: ;
                 endcase
@@ -134,46 +138,25 @@ module main
         .seg(seg)
     );
 
-    SignalGenerator signal_gen_inst
+    Method0Output method0_output_inst
     (
         .clk100M(clk_100M),
         .rstn(rstn),
         .freq(method0_freq),
+        .waveform(method0_waveform),
         .signal(method0_signal)
     );
-endmodule
 
-
-module SignalGenerator
-(
-    input clk100M, rstn,
-    input [23:0] freq,  // 频率，单位Hz
-    output [13:0] signal
-);
-    parameter FIXED_WIDTH = 38;  // 相位累加器定点数宽度
-    parameter PHASE_WIDTH = FIXED_WIDTH + 12;  // 相位累加器总宽度
-    parameter CLK_FREQ = 100_000_000;  // 时钟频率，单位Hz
-    reg [PHASE_WIDTH-1:0] phase = 0;
-    reg [11:0] addr = 0;
-
-    localparam [31:0] PHASE_K = (64'd1 << PHASE_WIDTH) / CLK_FREQ;
-    wire [PHASE_WIDTH-1:0] phase_increment = freq * PHASE_K;  // 计算相位增量
-
-    always @(posedge clk100M or negedge rstn) begin
-        if (!rstn) begin
-            phase <= 0;
-            addr <= 0;
-        end
-        else begin
-            phase <= phase + phase_increment;
-            addr <= phase[PHASE_WIDTH-1:PHASE_WIDTH-12];  // 解除定点数位移
-        end
-    end
-
-    sin_rom rom(
-        .address(addr),
-        .clock(clk100M),
-        .q(signal)
+    Method1Output method1_output_inst
+    (
+        .clk100M(clk_100M),
+        .rstn(rstn),
+        .mode(method1_mode),
+        .freq_carry(method1_freq_carry),
+        .freq_mod(method1_freq_mod),
+        .am_rate(method1_am_rate),
+        .fm_offset(method1_fm_offset),
+        .signal(method1_signal)
     );
 endmodule
 
@@ -230,5 +213,165 @@ module UARTParser
             end
         end
     end
+endmodule
+
+module SinWaveGenerator
+(
+    input clk100M, rstn,
+    input [23:0] freq,  // 频率，单位Hz
+    output [13:0] signal
+);
+    parameter FIXED_WIDTH = 38;  // 相位累加器定点数宽度
+    parameter PHASE_WIDTH = FIXED_WIDTH + 12;  // 相位累加器总宽度
+    parameter CLK_FREQ = 100_000_000;  // 时钟频率，单位Hz
+    reg [PHASE_WIDTH-1:0] phase = 0;
+    reg [11:0] addr = 0;
+
+    localparam [31:0] PHASE_K = (64'd1 << PHASE_WIDTH) / CLK_FREQ;
+    wire [PHASE_WIDTH-1:0] phase_increment = freq * PHASE_K;  // 计算相位增量
+
+    always @(posedge clk100M or negedge rstn) begin
+        if (!rstn) begin
+            phase <= 0;
+            addr <= 0;
+        end
+        else begin
+            phase <= phase + phase_increment;
+            addr <= phase[PHASE_WIDTH-1:PHASE_WIDTH-12];  // 解除定点数位移
+        end
+    end
+
+    sin_rom rom(
+        .address(addr),
+        .clock(clk100M),
+        .q(signal)
+    );
+endmodule
+
+module Method0Output
+(
+    input clk100M, rstn,
+    input [23:0] freq,  // 基础频率
+    input [7:0] waveform,  // 波形类型
+    output [13:0] signal
+);
+    wire [13:0] sin_signal;
+    SinWaveGenerator sin_gen_inst
+    (
+        .clk100M(clk100M),
+        .rstn(rstn),
+        .freq(freq),
+        .signal(sin_signal)
+    );
+
+    assign signal = (waveform == 8'd0) ? sin_signal : 14'b00000000000000;  // 根据波形类型选择输出
+endmodule
+
+module Method1Output
+(
+    input clk100M, rstn,
+    input mode,  // 0: AM, 1: FM
+    input [23:0] freq_carry,  // 载波频率
+    input [23:0] freq_mod,    // 调制频率
+    input [7:0] am_rate,      // AM调制度
+    input [23:0] fm_offset,   // FM频率偏移
+    output [13:0] signal
+);
+    localparam integer FREQ_Q = 30;
+    localparam integer RATE_Q = 8;
+    localparam integer WIDTH = FREQ_Q + RATE_Q + 22 + 2;
+    wire [13:0] carry_signal;
+    SinWaveGenerator carry_gen_inst
+    (
+        .clk100M(clk100M),
+        .rstn(rstn),
+        .freq(freq_carry),
+        .signal(carry_signal)
+    );
+
+    wire [13:0] mod_signal;
+    SinWaveGenerator mod_gen_inst
+    (
+        .clk100M(clk100M),
+        .rstn(rstn),
+        .freq(freq_mod),
+        .signal(mod_signal)
+    );
+
+    wire signed [WIDTH-1:0] sgn_mod_signal;
+    wire signed [WIDTH-1:0] sgn_carry_signal;
+    wire signed [WIDTH-1:0] sgn_am_rate;
+
+    assign sgn_mod_signal = {{(WIDTH - 14){1'b0}}, mod_signal};
+    assign sgn_carry_signal = {{(WIDTH - 14){1'b0}}, carry_signal};
+    assign sgn_am_rate = {{(WIDTH - 8){1'b0}}, am_rate};
+
+    // ============================================================
+    // Pipeline Stage 1: 并行计算 ma, A, carry_centered
+    // ============================================================
+    wire signed [WIDTH-1:0] ma_comb;
+    wire signed [WIDTH-1:0] A_comb;
+    wire signed [WIDTH-1:0] carry_centered_comb;
+
+    assign ma_comb = (sgn_am_rate <<< RATE_Q) / 100;
+    assign A_comb = 2 * (sgn_mod_signal <<< FREQ_Q) / 16383 - $signed(64'b1 << FREQ_Q);
+    assign carry_centered_comb = $signed(sgn_carry_signal) - $signed({{(WIDTH-14){1'b0}}, 14'd8192});
+
+    reg signed [WIDTH-1:0] ma_r, A_r, carry_centered_r;
+    always @(posedge clk100M or negedge rstn) begin
+        if (!rstn) begin
+            ma_r <= 0;
+            A_r <= 0;
+            carry_centered_r <= 0;
+        end else begin
+            ma_r <= ma_comb;
+            A_r <= A_comb;
+            carry_centered_r <= carry_centered_comb;
+        end
+    end
+
+    // ============================================================
+    // Pipeline Stage 2: coeff = 1 + ma*A (Q38), 延迟 carry_centered
+    // ============================================================
+    wire signed [WIDTH-1:0] coeff_comb;
+    assign coeff_comb = $signed(64'b1 << (FREQ_Q + RATE_Q)) + (ma_r * A_r);
+
+    reg signed [WIDTH-1:0] coeff_r, carry_centered_r2;
+    always @(posedge clk100M or negedge rstn) begin
+        if (!rstn) begin
+            coeff_r <= $signed(64'b1 << (FREQ_Q + RATE_Q));  // 1.0 in Q38（无调制）
+            carry_centered_r2 <= 0;
+        end else begin
+            coeff_r <= coeff_comb;
+            carry_centered_r2 <= carry_centered_r;
+        end
+    end
+
+    // ============================================================
+    // Pipeline Stage 3: 调制运算 + 限幅，输出寄存器消除毛刺
+    // ============================================================
+    wire signed [WIDTH-1:0] am_modulated_comb;
+    wire signed [WIDTH-1:0] am_with_dc_comb;
+
+    assign am_modulated_comb = (carry_centered_r2 * coeff_r) >>> (FREQ_Q + RATE_Q + 1);
+    assign am_with_dc_comb = am_modulated_comb + $signed({{(WIDTH-14){1'b0}}, 14'd8192});
+
+    wire [13:0] am_saturated_comb;
+    assign am_saturated_comb = am_with_dc_comb[WIDTH-1] ? 14'd0 :
+                               (|am_with_dc_comb[WIDTH-2:14]) ? 14'd16383 :
+                               am_with_dc_comb[13:0];
+
+    reg [13:0] am_output_r;
+    always @(posedge clk100M or negedge rstn) begin
+        if (!rstn)
+            am_output_r <= 14'd8192;
+        else
+            am_output_r <= am_saturated_comb;
+    end
+
+    assign signal = (mode == 1'b0) ? am_output_r :
+                    (mode == 1'b1) ? 14'b00000000000001 :
+                    14'b00000000000000;  // 根据调制模式选择输出
+
 endmodule
 
