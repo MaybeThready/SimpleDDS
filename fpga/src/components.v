@@ -245,6 +245,74 @@ module FSM
     end
 endmodule
 
+// 异步信号同步器
+// clk: 时钟信号
+// rstn: 复位信号，低电平有效
+// signal: 输入的异步信号
+// signal_sync: 输出的同步信号
+module SignalSync
+(
+    input clk, rstn, signal,
+    output reg signal_sync
+);
+    parameter DEFAULT_VALUE = 1'b0;
+    reg signal_buf;
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            signal_buf <= DEFAULT_VALUE;
+            signal_sync <= DEFAULT_VALUE;
+        end
+        else begin
+            signal_buf <= signal;
+            signal_sync <= signal_buf;
+        end
+    end
+endmodule
+
+// 上升沿检测器
+// clk: 时钟信号
+// rstn: 复位信号，低电平有效
+// signal_sync: 输入的同步信号。模块内部为了避免延迟没有进行二次同步，因此要求输入信号已经过同步处理
+// signal_posedge: 输出的上升沿检测信号，当signal_sync从0变为1时，signal_posedge为1
+module PosedgeDetector
+(
+    input clk, rstn, signal_sync,
+    output signal_posedge
+);
+    reg signal_sync_prev;
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            signal_sync_prev <= 1'b0;
+        end
+        else begin
+            signal_sync_prev <= signal_sync;
+        end
+    end
+    assign signal_posedge = signal_sync & ~signal_sync_prev;
+endmodule
+
+// 下降沿检测器
+// clk: 时钟信号
+// rstn: 复位信号，低电平有效
+// signal_sync: 输入的同步信号。模块内部为了避免延迟没有进行二次同步，因此要求输入信号已经过同步处理
+// signal_negedge: 输出的下降沿检测信号，当signal_sync从1变为0时，signal_negedge为1
+module NegedgeDetector
+(
+    input clk, rstn, signal_sync,
+    output signal_negedge
+);
+    reg signal_sync_prev;
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            signal_sync_prev <= 1'b0;
+        end
+        else begin
+            signal_sync_prev <= signal_sync;
+        end
+    end
+    assign signal_negedge = ~signal_sync & signal_sync_prev;
+endmodule
+
 module UARTReceiver
 (
     input clk, rstn, rx,
@@ -258,24 +326,25 @@ module UARTReceiver
 
     localparam integer BIT_PERIOD_I = BIT_PERIOD;
     localparam integer HALF_PERIOD_I = (BIT_PERIOD_I >> 1);
-    localparam integer TICK_W = $clog2(BIT_PERIOD_I);
 
-    // 同步接收信号，避免亚稳态
-    reg rx_sync_0, rx_sync;
-    always @(posedge clk or negedge rstn) begin
-        if (!rstn) begin
-            rx_sync_0 <= 1'b1;
-            rx_sync <= 1'b1;
-        end
-        else begin
-            rx_sync_0 <= rx;
-            rx_sync <= rx_sync_0;
-        end
-    end
+    wire rx_sync;
+    SignalSync #(1'b1) sync_inst(
+        .clk(clk),
+        .rstn(rstn),
+        .signal(rx),
+        .signal_sync(rx_sync)
+    );
 
-    wire [TICK_W-1:0] tick_count;
+    wire rx_negedge;
+    NegedgeDetector negedge_inst(
+        .clk(clk),
+        .rstn(rstn),
+        .signal_sync(rx_sync),
+        .signal_negedge(rx_negedge)
+    );
+
+    wire [$clog2(BIT_PERIOD_I)-1:0] tick_count;
     reg [2:0] bit_index = 3'd0;
-    reg rx_sync_prev = 1'b1;
 
     reg tick_rstn = 1'b0;
     wire tick_carry;
@@ -300,73 +369,48 @@ module UARTReceiver
     always @(*) begin
         stn = stc;
         case (stc)
-            IDLE: begin
-                if (rx_sync_prev == 1'b1 && rx_sync == 1'b0) begin
-                    stn = START;
-                end
-            end
+            IDLE: stn = rx_negedge ? START : stn;
 
-            START: begin
-                if (tick_count == HALF_PERIOD_I[TICK_W-1:0]) begin
-                    if (rx_sync == 1'b0) begin
-                        stn = DATA;
-                    end
-                    else begin
-                        stn = IDLE; // false start
-                    end
-                end
-            end
+            START: stn = (tick_count == HALF_PERIOD_I) ? (rx_sync ? IDLE : DATA) : stn;
 
-            DATA: begin
-                if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1 && bit_index == 3'd7) begin
-                    stn = STOP;
-                end
-            end
+            DATA: stn = (tick_carry && bit_index == 3'd7) ? STOP : stn;
 
-            STOP: begin
-                if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1) begin
-                    stn = IDLE;
-                end
-            end
+            STOP: stn = tick_carry ? IDLE : stn;
 
-            default: begin
-                stn = IDLE;
-            end
+            default: stn = IDLE;
         endcase
     end
 
-    // 状态输出逻辑
-    // 在单一时钟域内完成采样，避免跨时钟域误差
     always @(posedge clk or negedge rstn) begin
         if (!rstn) begin
             bit_index <= 3'd0;
             data <= 8'b0;
             done <= 1'b0;
-            rx_sync_prev <= 1'b1;
             tick_rstn <= 1'b0;
         end
         else begin
-            done <= 1'b0;
-            rx_sync_prev <= rx_sync;
-
             case (stc)
                 IDLE: begin
+                    done <= 1'b0;
                     bit_index <= 3'd0;
                     tick_rstn <= 1'b0;
                 end
 
                 START: begin
-                    if (tick_count == HALF_PERIOD_I[TICK_W-1:0] && rx_sync == 1'b0) begin
-                        tick_rstn <= 1'b0; // 对齐数据位采样相位
+                    done <= 1'b0;
+                    bit_index <= 3'd0;
+                    if (tick_count == HALF_PERIOD_I && rx_sync == 1'b0) begin
+                        tick_rstn <= 1'b0;  // 重置计数器，准备循环计数
                     end
                     else begin
-                        tick_rstn <= 1'b1;
+                        tick_rstn <= 1'b1;  // 伪启动，保持计数器直至状态转移回空闲状态
                     end
                 end
 
                 DATA: begin
                     tick_rstn <= 1'b1;
-                    if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1) begin
+                    done <= 1'b0;
+                    if (tick_carry) begin
                         data[bit_index] <= rx_sync;
                         if (bit_index == 3'd7) begin
                             bit_index <= 3'd0;
@@ -379,14 +423,13 @@ module UARTReceiver
 
                 STOP: begin
                     tick_rstn <= 1'b1;
-                    if (tick_count == BIT_PERIOD_I[TICK_W-1:0] - 1'b1) begin
-                        done <= 1'b1;
-                    end
+                    done <= tick_carry;  // 在停止位结束时输出done信号
                 end
 
                 default: begin
                     bit_index <= 3'd0;
                     tick_rstn <= 1'b0;
+                    done <= 1'b0;
                 end
             endcase
         end
