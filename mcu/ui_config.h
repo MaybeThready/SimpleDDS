@@ -107,7 +107,7 @@ static void init_ui()
     init_ui_input_box_double(&analog_modulation_carry_freq_input, "Carr Freq", 1000000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
     analog_modulation_carry_freq_input.selected_suffix_index = 2;
     init_ui_input_box_double(&analog_modulation_depth_input, "Depth", 100.0, rate_coeffs, rate_suffixes, sizeof(rate_suffixes) / sizeof(rate_suffixes[0]), 1, true);
-    init_ui_input_box_double(&analog_modulation_offset_input, "Freq Offset", 5000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
+    init_ui_input_box_double(&analog_modulation_offset_input, "Offset", 5000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
     analog_modulation_offset_input.selected_suffix_index = 1;
 
     init_ui_menu(&analog_modulation_menu, "Analog Modulation", analog_modulation_menu_items, sizeof(analog_modulation_menu_items) / sizeof(analog_modulation_menu_items[0]));

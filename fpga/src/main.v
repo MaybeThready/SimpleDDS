@@ -158,6 +158,17 @@ module main
         .fm_offset(method1_fm_offset),
         .signal(method1_signal)
     );
+
+    Method2Output method2_output_inst
+    (
+        .clk100M(clk_100M),
+        .rstn(rstn),
+        .mode(method2_mode),
+        .freq_carry(method2_freq_carry),
+        .bitrate(method2_bitrate),
+        .digital_signal(method2_digital_signal),
+        .signal(method2_signal)
+    );
 endmodule
 
 module UARTParser
@@ -277,19 +288,37 @@ module Method1Output
     input [23:0] fm_offset,   // FM频率偏移
     output [13:0] signal
 );
-    localparam integer FREQ_Q = 30;
+    localparam integer FREQ_Q = 14;
     localparam integer RATE_Q = 8;
     localparam integer WIDTH = FREQ_Q + RATE_Q + 22 + 2;
+
+    ////// FM调制频率计算
+    reg signed [39:0] sgn_fm_freq;
+    wire [23:0] fm_freq;
+    wire [23:0] carry_freq_sel;
     wire [13:0] carry_signal;
+    wire [13:0] mod_signal;
+    wire signed [39:0] sgn_mod_signal_fm;
+
+    assign sgn_mod_signal_fm = $signed({{(40 - 14){1'b0}}, mod_signal}) - $signed(40'd8192);
+    always @(posedge clk100M or negedge rstn) begin
+        if (!rstn)
+            sgn_fm_freq <= $signed({16'b0, freq_carry});
+        else
+            sgn_fm_freq <= $signed({16'b0, freq_carry}) + ((sgn_mod_signal_fm * $signed({16'b0, fm_offset})) >>> 13);
+    end
+    assign fm_freq = sgn_fm_freq[23:0];
+
+    // FM模式复用载波DDS，减少一个ROM实例
+    assign carry_freq_sel = (mode == 1'b1) ? fm_freq : freq_carry;
     SinWaveGenerator carry_gen_inst
     (
         .clk100M(clk100M),
         .rstn(rstn),
-        .freq(freq_carry),
+        .freq(carry_freq_sel),
         .signal(carry_signal)
     );
 
-    wire [13:0] mod_signal;
     SinWaveGenerator mod_gen_inst
     (
         .clk100M(clk100M),
@@ -307,7 +336,7 @@ module Method1Output
     assign sgn_am_rate = {{(WIDTH - 8){1'b0}}, am_rate};
 
     // ============================================================
-    // Pipeline Stage 1: 并行计算 ma, A, carry_centered
+    // Pipeline Stage 1: 并行计算 ma, A, carry_centered（组合逻辑 → 寄存器）
     // ============================================================
     wire signed [WIDTH-1:0] ma_comb;
     wire signed [WIDTH-1:0] A_comb;
@@ -331,7 +360,7 @@ module Method1Output
     end
 
     // ============================================================
-    // Pipeline Stage 2: coeff = 1 + ma*A (Q38), 延迟 carry_centered
+    // Pipeline Stage 2: coeff = 1 + ma*A（组合逻辑 → 寄存器），延迟 carry_centered
     // ============================================================
     wire signed [WIDTH-1:0] coeff_comb;
     assign coeff_comb = $signed(64'b1 << (FREQ_Q + RATE_Q)) + (ma_r * A_r);
@@ -348,7 +377,7 @@ module Method1Output
     end
 
     // ============================================================
-    // Pipeline Stage 3: 调制运算 + 限幅，输出寄存器消除毛刺
+    // Pipeline Stage 3: 调制运算 + 限幅（组合逻辑 → 寄存器输出）
     // ============================================================
     wire signed [WIDTH-1:0] am_modulated_comb;
     wire signed [WIDTH-1:0] am_with_dc_comb;
@@ -369,9 +398,60 @@ module Method1Output
             am_output_r <= am_saturated_comb;
     end
 
-    assign signal = (mode == 1'b0) ? am_output_r :
-                    (mode == 1'b1) ? 14'b00000000000001 :
-                    14'b00000000000000;  // 根据调制模式选择输出
+    wire [13:0] fm_output_r;
+    assign fm_output_r = carry_signal;
 
+    assign signal = (mode == 1'b0) ? am_output_r :
+                    (mode == 1'b1) ? fm_output_r :
+                    14'b00000000000000;  // 根据调制模式选择输出
 endmodule
 
+module Method2Output
+(
+    input clk100M, rstn,
+    input mode,  // 0: ASK, 1: PSK
+    input [23:0] freq_carry,  // 载波频率
+    input [15:0] bitrate,    // 比特率
+    input [7:0] digital_signal,  // 数字信号（每位代表一个数字调制的输入）
+    output [13:0] signal
+);
+    parameter CLK_FREQ = 100_000_000;
+    wire [13:0] carry_signal;
+    SinWaveGenerator carry_gen_inst
+    (
+        .clk100M(clk100M),
+        .rstn(rstn),
+        .freq(freq_carry),
+        .signal(carry_signal)
+    );
+
+    wire [13:0] ask_signal, psk_signal;
+    wire [31:0] period = CLK_FREQ / bitrate;
+    reg [31:0] bit_timer = 0;
+    reg [2:0] bit_index = 0;
+    reg current_bit = 0;
+    always @(posedge clk100M or negedge rstn) begin
+        if (!rstn) begin
+            bit_timer <= 0;
+            bit_index <= 0;
+            current_bit <= 0;
+        end
+        else begin
+            if (bit_timer >= period) begin
+                bit_timer <= 0;
+                current_bit <= digital_signal[bit_index];
+                bit_index <= (bit_index + 1) % 8;
+            end
+            else begin
+                bit_timer <= bit_timer + 1;
+            end
+        end
+    end
+
+    assign ask_signal = current_bit ? carry_signal : 14'b00000000000000;
+    assign psk_signal = current_bit ? carry_signal : (carry_signal ^ 14'b11111111111111);
+
+    assign signal = (mode == 1'b0) ? ask_signal :
+                    (mode == 1'b1) ? psk_signal :
+                    14'b00000000000000;  // 根据调制模式选择输出
+endmodule
