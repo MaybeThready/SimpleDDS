@@ -11,7 +11,7 @@ int main()
     init_oled();
     init_ui();
     init_keyboard();
-    init_uart();
+    // init_uart();
 
     while (1)
     {

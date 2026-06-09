@@ -90,7 +90,7 @@ static void init_ui()
     // ===== 初始化Simple Output菜单 =====
 
     init_ui_checkbox(&simple_output_checkbox, "Enable", false);
-    init_ui_input_box_double(&simple_output_freq_input, "Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
+    init_ui_input_box_double(&simple_output_freq_input, "Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 4, true, true, 100.0);
     simple_output_freq_input.selected_suffix_index = 1;
     init_ui_choose_box(&simple_output_waveform_choose, "Waveform", simple_output_waveform_options, sizeof(simple_output_waveform_options) / sizeof(simple_output_waveform_options[0]), 0);
 
@@ -102,12 +102,12 @@ static void init_ui()
 
     init_ui_checkbox(&analog_modulation_checkbox, "Enable", false);
     init_ui_choose_box(&analog_modulation_type_choose, "Type", analog_modulation_type_options, sizeof(analog_modulation_type_options) / sizeof(analog_modulation_type_options[0]), 0);
-    init_ui_input_box_double(&analog_modulation_freq_input, "Mod Freq", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
+    init_ui_input_box_double(&analog_modulation_freq_input, "Mod", 1000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 4, true, true, 100.0);
     analog_modulation_freq_input.selected_suffix_index = 1;
-    init_ui_input_box_double(&analog_modulation_carry_freq_input, "Carr Freq", 1000000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
+    init_ui_input_box_double(&analog_modulation_carry_freq_input, "Carr", 1000000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 4, true, true, 100.0);
     analog_modulation_carry_freq_input.selected_suffix_index = 2;
-    init_ui_input_box_double(&analog_modulation_depth_input, "Depth", 100.0, rate_coeffs, rate_suffixes, sizeof(rate_suffixes) / sizeof(rate_suffixes[0]), 1, true);
-    init_ui_input_box_double(&analog_modulation_offset_input, "Offset", 5000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
+    init_ui_input_box_double(&analog_modulation_depth_input, "Depth", 100.0, rate_coeffs, rate_suffixes, sizeof(rate_suffixes) / sizeof(rate_suffixes[0]), 1, true, true, 1.0);
+    init_ui_input_box_double(&analog_modulation_offset_input, "Offset", 5000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 4, true, true, 100.0);
     analog_modulation_offset_input.selected_suffix_index = 1;
 
     init_ui_menu(&analog_modulation_menu, "Analog Modulation", analog_modulation_menu_items, sizeof(analog_modulation_menu_items) / sizeof(analog_modulation_menu_items[0]));
@@ -118,9 +118,9 @@ static void init_ui()
 
     init_ui_checkbox(&digital_modulation_checkbox, "Enable", false);
     init_ui_choose_box(&digital_modulation_type_choose, "Type", digital_modulation_type_options, sizeof(digital_modulation_type_options) / sizeof(digital_modulation_type_options[0]), 0);
-    init_ui_input_box_double(&digital_modulation_carry_freq_input, "Carr Freq", 100000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 3, true);
+    init_ui_input_box_double(&digital_modulation_carry_freq_input, "Carr", 100000.0, freq_coeffs, freq_suffixes, sizeof(freq_suffixes) / sizeof(freq_suffixes[0]), 4, true, true, 100.0);
     digital_modulation_carry_freq_input.selected_suffix_index = 1;
-    init_ui_input_box_double(&digital_modulation_bitrate_input, "Bitrate", 10000.0, bitrate_coeffs, bitrate_suffixes, sizeof(bitrate_suffixes) / sizeof(bitrate_suffixes[0]), 3, true);
+    init_ui_input_box_double(&digital_modulation_bitrate_input, "Bitrate", 10000.0, bitrate_coeffs, bitrate_suffixes, sizeof(bitrate_suffixes) / sizeof(bitrate_suffixes[0]), 3, true, true, 100.0);
     digital_modulation_bitrate_input.selected_suffix_index = 1;
     init_ui_input_box_bin(&digital_modulation_data_input, "Data", 0, 8);
 

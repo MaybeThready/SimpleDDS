@@ -59,6 +59,7 @@ typedef struct UIWidget
     void (*enter)(struct UIWidget* widget);
     void (*render)(struct UIWidget* widget);
     void (*step)(struct UIWidget* widget);
+    void (*quick_adjust)(struct UIWidget* widget, bool increase);
 } UIWidget;
 
 // 窗口
@@ -136,6 +137,8 @@ typedef struct UIInputBoxDouble
     UIWidget unit_curr;
     UIWidget unit_next;
     uint32_t frac_length;
+    bool quick_adjust_enabled;
+    double quick_adjust_step;
     bool ignore_positive_sgn;  // 是否在显示正数时忽略+号
     UIInputBoxState state;
     DoubleChangeCallbackFunc on_value_changed;
@@ -232,12 +235,14 @@ void init_ui_popup_button(UIPopupButton* button, const char* text);
  * @param suffix_count 后缀数量
  * @param frac_length 小数位数
  * @param ignore_positive_sgn 是否忽略正号显示
+ * @param quick_adjust_enabled Enable left/right quick adjust while selected in menu
+ * @param quick_adjust_step Actual-value step used by quick adjust
  * @note 输入过程中修改的是临时值，只有按确认键才写回
  * @note 单位可通过scr_up/scr_down切换，显示值保持不变，仅单位变化
  * @note 单位切换后的实际值仅在确认键按下后写回
  * @note suffix与coeffs数组及其内容需在输入框生命周期内保持有效
  */
-void init_ui_input_box_double(UIInputBoxDouble* input_box, const char* title, double initial_value, const double* coeffs, const char** suffix, uint8_t suffix_count, uint8_t frac_length, bool ignore_positive_sgn);
+void init_ui_input_box_double(UIInputBoxDouble* input_box, const char* title, double initial_value, const double* coeffs, const char** suffix, uint8_t suffix_count, uint8_t frac_length, bool ignore_positive_sgn, bool quick_adjust_enabled, double quick_adjust_step);
 
 /**
  *@brief 初始化选择框

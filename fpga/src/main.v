@@ -7,7 +7,8 @@ module main
     output  [5:0]   sel,
     output  [7:0]   seg,
     output  [7:0]  ctw,
-    output  reg [7:0]  last_data
+    output  reg [7:0]  last_data,
+    output  bin_signal
 );
     pll pll_inst
     (
@@ -115,10 +116,10 @@ module main
         end
     end
 
-    assign signal = (out_channel == 2'b00) ? method0_signal :
+    assign signal = ~((out_channel == 2'b00) ? method0_signal :
                     (out_channel == 2'b01) ? method1_signal :
                     (out_channel == 2'b10) ? method2_signal :
-                    14'b00000000000000;  // 默认输出0
+                    14'b00000000000000);  // 默认输出0
 
     wire clk_1kHz;
     DIV #(50_000) div_1kHz_inst
@@ -167,7 +168,8 @@ module main
         .freq_carry(method2_freq_carry),
         .bitrate(method2_bitrate),
         .digital_signal(method2_digital_signal),
-        .signal(method2_signal)
+        .signal(method2_signal),
+        .bin_signal(bin_signal)
     );
 endmodule
 
@@ -413,7 +415,8 @@ module Method2Output
     input [23:0] freq_carry,  // 载波频率
     input [15:0] bitrate,    // 比特率
     input [7:0] digital_signal,  // 数字信号（每位代表一个数字调制的输入）
-    output [13:0] signal
+    output [13:0] signal,
+    output bin_signal
 );
     parameter CLK_FREQ = 100_000_000;
     wire [13:0] carry_signal;
@@ -454,4 +457,6 @@ module Method2Output
     assign signal = (mode == 1'b0) ? ask_signal :
                     (mode == 1'b1) ? psk_signal :
                     14'b00000000000000;  // 根据调制模式选择输出
+
+    assign bin_signal = current_bit;  // 输出当前比特的二进制值
 endmodule

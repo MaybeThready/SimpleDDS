@@ -44,6 +44,7 @@ static int16_t ui_input_box_get_content_x(const UIInputBoxDouble* input_box, uin
 static int16_t ui_input_box_get_unit_x(const UIInputBoxDouble* input_box, int16_t content_x, uint8_t total_length, uint16_t gap_length);
 static void ui_input_box_set_unit_widget(UIWidget* widget, int16_t x, int16_t y);
 static void ui_input_box_start_unit_slide(UIInputBoxDouble* input_box, uint8_t next_index, bool forward, int16_t unit_x, int16_t content_y);
+static void ui_input_box_double_quick_adjust(UIWidget* self, bool increase);
 static void ui_menu_item_render(UIWidget* self);
 static void ui_menu_widget_render(UIWidget* self);
 static void ui_menu_enter(UIWidget* self);
@@ -278,6 +279,43 @@ static void ui_input_box_start_unit_slide(UIInputBoxDouble* input_box, uint8_t n
         ui_input_box_set_unit_widget(&input_box->unit_curr, input_box->unit_curr.x, off_bottom);
         input_box->unit_next.y = (float)off_top;
         ui_input_box_set_unit_widget(&input_box->unit_next, input_box->unit_next.x, content_y);
+    }
+}
+
+static void ui_input_box_double_quick_adjust(UIWidget* self, bool increase)
+{
+    UIInputBoxDouble* input_box = container_of(self, UIInputBoxDouble, base);
+
+    if (!input_box->quick_adjust_enabled)
+    {
+        return;
+    }
+
+    double step = fabs(input_box->quick_adjust_step);
+    if (step <= 0.0)
+    {
+        return;
+    }
+
+    double next_value = input_box->value + (increase ? step : -step);
+    if (next_value < 0.0)
+    {
+        next_value = 0.0;
+    }
+
+    if (next_value == input_box->value)
+    {
+        return;
+    }
+
+    input_box->value = next_value;
+    input_box->edit_value = next_value;
+    input_box->edit_suffix_index = input_box->selected_suffix_index;
+    input_box->display_suffix_index = input_box->selected_suffix_index;
+
+    if (input_box->on_value_changed != NULL)
+    {
+        input_box->on_value_changed(input_box);
     }
 }
 
@@ -600,6 +638,21 @@ void ui_menu_process_input(UIMenu* menu)
     if (ui_key_down->signal_event == KEY_PRESS)
     {
         selection_changed = find_available_selection(menu->items, menu->item_count, &menu->selected_index, true);
+    }
+    if (menu->item_count > 0 && menu->selected_index >= 0 && menu->selected_index < menu->item_count)
+    {
+        UIWidget* selected_item = menu->items[menu->selected_index];
+        if (selected_item != NULL && selected_item->quick_adjust != NULL)
+        {
+            if (ui_key_decr->signal_event == KEY_PRESS)
+            {
+                selected_item->quick_adjust(selected_item, false);
+            }
+            else if (ui_key_incr->signal_event == KEY_PRESS)
+            {
+                selected_item->quick_adjust(selected_item, true);
+            }
+        }
     }
     if (ui_key_enter->signal_event == KEY_PRESS)
     {
@@ -1649,6 +1702,7 @@ void init_ui_widget(UIWidget* widget)
     widget->enter = NULL;
     widget->render = NULL;
     widget->step = ui_widget_step;
+    widget->quick_adjust = NULL;
 }
 
 /**
@@ -1825,13 +1879,15 @@ void init_ui_choose_box(UIChooseBox* choose_box, const char* title, const char**
  * @param suffix_count 后缀数量
  * @param frac_length 小数位数
  * @param ignore_positive_sgn 是否忽略正号显示
- * @param on_value_changed 数值确认后的回调函数，参数为UIInputBoxDouble对象指针
+ * @param quick_adjust_enabled Enable left/right quick adjust while selected in menu
+ * @param quick_adjust_step Actual-value step used by quick adjust
  */
-void init_ui_input_box_double(UIInputBoxDouble* input_box, const char* title, double initial_value, const double* coeffs, const char** suffix, uint8_t suffix_count, uint8_t frac_length, bool ignore_positive_sgn)
+void init_ui_input_box_double(UIInputBoxDouble* input_box, const char* title, double initial_value, const double* coeffs, const char** suffix, uint8_t suffix_count, uint8_t frac_length, bool ignore_positive_sgn, bool quick_adjust_enabled, double quick_adjust_step)
 {
     init_ui_popup_button(&input_box->base, title);
     input_box->base.base.enter = ui_input_box_double_enter;
     input_box->base.base.render = ui_input_box_double_render;
+    input_box->base.base.quick_adjust = ui_input_box_double_quick_adjust;
     init_ui_window(&input_box->base.window, title);
     input_box->base.window.render = ui_input_box_double_window_render_items;
     input_box->base.window.process_input = ui_input_box_double_window_process_input;
@@ -1851,6 +1907,8 @@ void init_ui_input_box_double(UIInputBoxDouble* input_box, const char* title, do
     init_ui_widget(&input_box->unit_curr);
     init_ui_widget(&input_box->unit_next);
     input_box->frac_length = frac_length;
+    input_box->quick_adjust_enabled = quick_adjust_enabled;
+    input_box->quick_adjust_step = quick_adjust_step;
     input_box->ignore_positive_sgn = ignore_positive_sgn;
     input_box->state = UI_INPUT_BOX_IDLE;
     input_box->on_value_changed = NULL;
