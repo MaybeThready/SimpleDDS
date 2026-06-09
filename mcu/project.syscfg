@@ -36,6 +36,9 @@ divider7.divideValue = 2;
 const divider9       = system.clockTree["UDIV"];
 divider9.divideValue = 2;
 
+const gate8  = system.clockTree["MFPCLKGATE"];
+gate8.enable = true;
+
 const multiplier2         = system.clockTree["PLL_QDIV"];
 multiplier2.multiplyValue = 10;
 
@@ -155,15 +158,15 @@ UART2.$name                            = "DDS_UART";
 UART2.peripheral.$assign               = "UART1";
 UART2.peripheral.rxPin.$assign         = "PB5";
 UART2.peripheral.txPin.$assign         = "PB4";
-UART2.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric4";
 UART2.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
 UART2.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
 UART2.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
 UART2.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
-UART2.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric5";
+UART2.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric4";
 UART2.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
 UART2.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
 UART2.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART2.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric5";
 
 /**
  * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future

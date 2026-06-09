@@ -58,7 +58,7 @@ static UIWidget* digital_modulation_menu_items[] = {
 static UIWidget* main_menu_items[] = {
     &simple_output_menu.base,
     &analog_modulation_menu.base,
-    &digital_modulation_menu.base
+    &digital_modulation_menu.base,
 };
 
 static void init_ui()
