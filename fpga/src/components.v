@@ -436,3 +436,111 @@ module UARTReceiver
     end
 endmodule
 
+// 无符号数据四舍五入模块
+module UnsignedRnd
+#(
+    parameter DW_IN = 16,  // 输入数据位宽
+    parameter DW_OUT = 8   // 输出数据位宽
+)
+(
+    input [DW_IN-1:0] data_in,
+    output [DW_OUT-1:0] data_out
+);
+    reg [DW_OUT-1:0] data_out_reg;
+    always @(*)
+    begin
+        if (data_in[DW_IN-1:DW_IN-DW_OUT] == {{DW_OUT}{1'b1}})
+        begin
+            data_out_reg = data_in[DW_IN-1:DW_IN-DW_OUT];
+        end
+        else
+        begin
+            data_out_reg = data_in[DW_IN-1:DW_IN-DW_OUT] + data_in[DW_IN-DW_OUT-1];;
+        end
+    end
+
+    assign data_out = data_out_reg;
+endmodule
+
+// 无符号数据饱和模块
+module UnsignedSat
+#(
+    parameter DW_IN = 16,
+    parameter DW_OUT = 8
+)
+(
+    input [DW_IN-1:0] data_in,
+    output [DW_OUT-1:0] data_out
+);
+    reg [DW_OUT-1:0] data_out_reg;
+    always @(*)
+    begin
+        if (data_in[DW_IN-1:DW_OUT] == {{DW_IN-DW_OUT}{1'b0}})
+        begin
+            data_out_reg = data_in[DW_OUT-1:0];
+        end
+        else
+        begin
+            data_out_reg = {DW_OUT{1'b1}};
+        end
+    end
+
+    assign data_out = data_out_reg;
+endmodule
+
+// 有符号数据四舍五入模块
+module SignedRnd
+#(
+    parameter DW_IN = 16,
+    parameter DW_OUT = 8
+)
+(
+    input [DW_IN-1:0] data_in,
+    output [DW_OUT-1:0] data_out
+);
+    reg [DW_OUT-1:0] data_out_reg;
+    always @(*)
+    begin
+        if ((data_in[DW_IN-1:DW_IN-DW_OUT] == {1'b0, (DW_OUT-1){1'b1}}) || ((data_in[DW_IN-1] == 1'b1) && (data_in[DW_IN-DW_OUT-1:0] == {1'b1, (DW_IN-DW_OUT){1'b0}})))
+        begin
+            data_out_reg = data_in[DW_IN-1:DW_IN-DW_OUT];
+        end
+        else
+        begin
+            data_out_reg = data_in[DW_IN-1:DW_IN-DW_OUT] + data_in[DW_IN-DW_OUT-1];
+        end
+    end
+
+    assign data_out = data_out_reg;
+endmodule
+
+// 有符号数据饱和模块
+module SignedSat
+#(
+    parameter DW_IN = 16,
+    parameter DW_OUT = 8
+)
+(
+    input [DW_IN-1:0] data_in,
+    output [DW_OUT-1:0] data_out
+);
+    reg [DW_OUT-1:0] data_out_reg;
+    always @(*)
+    begin
+        if (data_in[DW_IN-1] == 1'b1 && data_in[DW_IN-2:DW_OUT-1] != {(DW_IN-DW_OUT){1'b1}})
+        begin
+            data_out_reg = {1'b1, {(DW_OUT-1){1'b0}}};
+        end
+        else if (data_in[DW_IN-1] == 1'b0 && data_in[DW_IN-2:DW_OUT-1] != {(DW_IN-DW_OUT){1'b0}})
+        begin
+            data_out_reg = {1'b0, {(DW_OUT-1){1'b1}}};
+        end
+        else
+        begin
+            data_out_reg = data_in[DW_OUT-1:0];
+        end
+    end
+
+    assign data_out = data_out_reg;
+endmodule
+
